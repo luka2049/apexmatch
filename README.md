@@ -1,91 +1,299 @@
-# apexmatch
+# ApexMatch — 高性能交易撮合引擎
 
-## 1. 功能
-### 1.1 撮合引擎核心功能
-- [ ] 支持**Java原生、Rust高性能**两套撮合引擎，通过配置文件`apexmatch.engine.type=java/rust`可一键切换，上层业务代码零修改。
-- [ ] 严格遵循**价格优先、时间优先**撮合规则，同一价格下按订单提交时间顺序成交。
-- [ ] 支持以下订单类型，且所有类型均通过单元测试与集成测试：
-    - 限价单（Limit Order）
-    - 市价单（Market Order）
-    - 止损限价单（Stop-Limit Order）
-    - 止损市价单（Stop-Market Order）
-    - FOK订单（Fill-or-Kill）
-    - IOC订单（Immediate-or-Cancel）
-- [ ] 支持O(1)时间复杂度撤单，撤单操作在1ms内完成。
-- [ ] 支持按交易对Sharding分片，不同交易对的撮合逻辑完全隔离。
-
-### 1.2 账户与持仓功能
-- [ ] 支持统一账户体系，同一用户可同时开通现货账户、保证金账户，支持账户间资金内部划转。
-- [ ] 支持**逐仓、全仓**两种保证金模式，用户可按交易对切换，切换后保证金计算逻辑正确。
-- [ ] 支持**单向持仓、对冲双向持仓**两种模式，双向持仓模式下可同时持有多仓和空仓。
-- [ ] 实时计算未实现盈亏、保证金率、可用资金，数据更新延迟≤100ms。
-- [ ] 每一笔资金变动（冻结、扣减、解冻、增加）均生成可追溯的流水记录，流水不可篡改、不可删除。
-
-### 1.3 结算与对账功能
-- [ ] 订单成交后实时完成清算（资金扣减、持仓更新、流水生成），清算操作支持分布式事务，无资金对账不平情况。
-- [ ] 支持日终切批对账，每日自动完成：
-    - 账户余额与资金流水汇总核对
-    - 撮合成交记录与资金流水核对
-    - 对账不平自动生成预警
-- [ ] 支持外汇交易隔夜利息（Swap）计算，每日固定时间自动完成利息结算。
-
-### 1.4 风控与强平功能
-- [ ] 实现事前风控：下单前校验余额、持仓限额、价格偏离度，异常订单拦截率100%。
-- [ ] 实现强制平仓功能：
-    - 实时监控保证金率，低于强平阈值时自动触发强平
-    - 强平流程完整（冻结持仓→市价单撮合→清算→更新持仓）
-- [ ] 支持止盈止损（SL/TP）功能：用户下单时绑定SL/TP价格，市场价格触发时自动转为市价单进入撮合队列。
-
-### 1.5 行情与接入功能
-- [ ] 基于撮合成交记录自动生成1min、5min、15min、1h、4h、1d、1w、1M共8个周期的K线数据。
-- [ ] 提供WebSocket长连接网关，支持实时推送：
-    - 盘口深度数据
-    - 逐笔成交记录
-    - 订单状态变更
-    - 持仓盈亏更新
-- [ ] 提供HTTP REST API、gRPC API两套对外接口，覆盖下单、撤单、查询等核心操作。
+ApexMatch 是一个支持 **Java / Rust 双引擎可切换** 的高性能交易撮合系统，涵盖撮合、账户、持仓、清算、风控、行情全链路。
 
 ---
 
-## 2. 性能达标标准
-| 指标项 | Rust引擎要求 | Java引擎要求 | 验证方式 |
-|--------|--------------|--------------|----------|
-| 单交易对撮合TPS | ≥150000（限价单场景） | ≥50000（限价单场景） | 使用自定义压测工具，持续压测5分钟 |
-| 撮合延迟 | P50≤50μs，P99≤300μs，P999≤800μs | P99≤10ms | 压测同时采集延迟数据，生成延迟分布报告 |
-| 订单提交响应时间 | P99≤10ms | P99≤10ms | JMeter压测，模拟1000并发用户 |
-| WebSocket推送延迟 | P99≤50ms | P99≤50ms | 模拟10万并发长连接，统计推送延迟 |
-| 历史数据查询响应时间 | P99≤200ms | P99≤200ms | 查询1年前的K线数据，统计响应时间 |
+## 目录
+
+- [环境要求](#环境要求)
+- [项目结构](#项目结构)
+- [快速启动](#快速启动)
+  - [1. 编译 Java 模块](#1-编译-java-模块)
+  - [2. 编译 Rust 引擎（可选）](#2-编译-rust-引擎可选)
+  - [3. 启动服务](#3-启动服务)
+  - [4. 引擎切换](#4-引擎切换)
+- [测试](#测试)
+  - [Java 全量测试](#java-全量测试)
+  - [按模块测试](#按模块测试)
+  - [集成测试](#集成测试)
+  - [性能压测](#性能压测)
+  - [故障演练](#故障演练)
+  - [Rust 引擎测试与基准测试](#rust-引擎测试与基准测试)
+- [API 文档](#api-文档)
+- [核心配置项](#核心配置项)
 
 ---
 
-## 3. 可用性达标标准
-- [ ] 系统全年可用性≥99.99%（模拟故障场景验证：主节点宕机、网络分区）。
-- [ ] 主从节点故障切换时间≤3s，切换过程不丢失已确认的订单数据。
-- [ ] 系统崩溃恢复时间≤30s：进程崩溃后，通过Systemd自动重启，加载快照+重放WAL日志，30s内恢复服务。
+## 环境要求
+
+| 工具      | 版本要求     |
+|-----------|-------------|
+| JDK       | 17+         |
+| Maven     | 3.8+        |
+| Rust      | 1.70+（仅 Rust 引擎需要） |
+| 操作系统  | macOS / Linux |
 
 ---
 
-## 4. 可靠性达标标准
-- [ ] 订单数据、资金流水数据零丢失：模拟断电、进程Kill场景，重启后数据完整恢复。
-- [ ] 撮合逻辑幂等性：重复提交相同`clientOrderId`的订单，不会导致重复撮合。
-- [ ] 资金操作原子性：并发资金操作下，不出现资金多扣、少加、对账不平的情况。
+## 项目结构
+
+```
+apexmatch/
+├── apexmatch-java/                    # Java 主工程（Maven 多模块）
+│   ├── apexmatch-common/              # 公共实体、枚举、工具类
+│   ├── apexmatch-engine-api/          # 撮合引擎统一接口（SPI）
+│   ├── apexmatch-engine-java/         # Java 原生撮合引擎实现
+│   ├── apexmatch-engine-rust-adapter/ # Rust 引擎 JNA 适配器
+│   ├── apexmatch-account/             # 账户 & 持仓服务
+│   ├── apexmatch-settlement/          # 清算 & 结算服务
+│   ├── apexmatch-risk/                # 风控 & 强平服务
+│   ├── apexmatch-market-data/         # K 线行情服务
+│   ├── apexmatch-ha/                  # 高可用（Raft / TCC / 本地消息表）
+│   ├── apexmatch-router/              # 一致性哈希路由 & 分片
+│   └── apexmatch-gateway/             # 接入层（REST / WebSocket / Disruptor）
+├── apexmatch-engine-rs/               # Rust 高性能撮合引擎（cdylib）
+└── docs/                              # 架构图 & 业务文档
+```
 
 ---
 
-## 5. 可观测性达标标准
-- [ ] 覆盖全链路Metrics监控：
-    - 核心业务指标：TPS、延迟、订单量、成交量、保证金率
-    - 系统指标：CPU/内存/磁盘使用率、网络IO
-    - 监控面板通过Grafana展示，所有指标可实时查询
-- [ ] 支持结构化日志输出：所有日志携带`traceId`、`orderId`、`userId`，支持通过ELK全链路追踪。
-- [ ] 提供健康检查接口：`/health`返回服务状态、WAL偏移量、内存使用量，支持第三方监控系统探测。
+## 快速启动
+
+### 1. 编译 Java 模块
+
+```bash
+cd apexmatch-java
+mvn clean install -DskipTests
+```
+
+编译产物位于 `apexmatch-gateway/target/apexmatch-gateway-1.0.0-SNAPSHOT.jar`。
+
+### 2. 编译 Rust 引擎（可选）
+
+如果需要使用 Rust 撮合引擎，先编译动态库：
+
+```bash
+cd apexmatch-engine-rs
+cargo build --release
+```
+
+产物路径：
+- macOS: `target/release/libapexmatch_engine_rs.dylib`
+- Linux: `target/release/libapexmatch_engine_rs.so`
+
+### 3. 启动服务
+
+**使用 Java 引擎（默认，无需额外配置）：**
+
+```bash
+cd apexmatch-java
+java -jar apexmatch-gateway/target/apexmatch-gateway-1.0.0-SNAPSHOT.jar
+```
+
+**使用 Rust 引擎：**
+
+```bash
+java -jar apexmatch-gateway/target/apexmatch-gateway-1.0.0-SNAPSHOT.jar \
+  --apexmatch.engine.type=rust \
+  --apexmatch.engine.rust-library-path=/path/to/libapexmatch_engine_rs.dylib
+```
+
+启动成功后：
+- REST API：`http://localhost:8080`
+- Swagger UI：`http://localhost:8080/swagger-ui.html`
+- WebSocket：`ws://localhost:8080/ws/market`
+
+### 4. 引擎切换
+
+两套引擎实现了同一个 `MatchingEngine` 接口，通过 Spring Boot 条件化配置实现零代码切换：
+
+| 配置项 | 说明 | 默认值 |
+|--------|------|--------|
+| `apexmatch.engine.type` | 引擎类型：`java` 或 `rust` | `java` |
+| `apexmatch.engine.rust-library-path` | Rust 动态库绝对路径（仅 `type=rust` 时需要） | — |
+| `apexmatch.engine.symbols` | 启动时初始化的交易对列表 | `BTC-USDT, ETH-USDT` |
+
+切换方式（三选一）：
+
+```bash
+# 方式一：启动参数
+java -jar gateway.jar --apexmatch.engine.type=rust
+
+# 方式二：环境变量
+export APEXMATCH_ENGINE_TYPE=rust
+export APEXMATCH_RUST_LIB_PATH=/opt/lib/libapexmatch_engine_rs.so
+java -jar gateway.jar
+
+# 方式三：修改 application.yml
+# apexmatch.engine.type: rust
+```
 
 ---
 
-## 6. 文档与代码规范标准
-- [ ] 代码符合Java/Rust语言规范：
-    - Java代码通过CheckStyle检查，无警告
-    - Rust代码通过`cargo clippy`检查，无警告
-- [ ] 核心模块代码注释覆盖率≥30%，关键逻辑必须有注释说明。
-- [ ] 提供完整的部署文档：包括物理机环境配置、K8s部署YAML、灾备恢复流程。
-- [ ] 提供完整的API文档：通过Swagger/OpenAPI生成，所有接口有参数说明、示例请求/响应。
+## 测试
+
+### Java 全量测试
+
+在 `apexmatch-java` 目录下运行全部单元测试 + 集成测试：
+
+```bash
+cd apexmatch-java
+mvn test
+```
+
+当前共 **100+ 个测试用例**，覆盖以下模块：
+
+| 模块 | 测试类 | 覆盖内容 |
+|------|--------|----------|
+| common | `MoneyUtilsTest`, `SnowflakeIdGeneratorTest` | 金额精度计算、雪花 ID 生成 |
+| engine-java | `OrderBookTest`, `JavaMatchingEngineTest`, `WalManagerTest`, `SnapshotManagerTest` | 订单簿增删改查、限价 / 市价 / FOK / IOC / 冰山单撮合、WAL 持久化、快照恢复 |
+| account | `AccountServiceTest`, `PositionServiceTest` | 余额冻结解冻、保证金计算、单向 / 双向持仓 |
+| settlement | `ClearingServiceTest`, `SettlementServiceTest` | 实时清算、手续费计算、日终对账 |
+| risk | `RiskControlServiceTest`, `LiquidationServiceTest` | 事前风控校验、强平流程 |
+| market-data | `KlineServiceTest` | K 线聚合（1m / 5m / 15m / 1h / 4h / 1d） |
+| ha | `RaftGroupTest`, `TccCoordinatorTest`, `LocalMessageTableTest` | Raft 日志复制 / Leader 选举、TCC 分布式事务、本地消息表 |
+| router | `ConsistentHashRingTest`, `ShardManagerTest` | 一致性哈希环、交易对分片路由 |
+| gateway | `OrderControllerTest`, `MarketDataControllerTest`, `TokenBucketRateLimiterTest`, `CircuitBreakerTest`, `OrderDisruptorServiceTest` | REST 接口、限流、熔断、Disruptor 背压 |
+
+### 按模块测试
+
+只运行某个模块的测试：
+
+```bash
+# 撮合引擎
+mvn test -pl apexmatch-engine-java
+
+# 账户服务
+mvn test -pl apexmatch-account
+
+# 清算服务
+mvn test -pl apexmatch-settlement
+
+# 风控服务
+mvn test -pl apexmatch-risk
+
+# 高可用模块
+mvn test -pl apexmatch-ha
+
+# 网关层
+mvn test -pl apexmatch-gateway
+```
+
+### 集成测试
+
+全链路集成测试覆盖：下单 → 撮合 → 清算 → 持仓更新 → K 线生成。
+
+```bash
+mvn test -pl apexmatch-gateway -Dtest="FullPipelineIntegrationTest"
+```
+
+测试场景包括：
+- 限价单完全成交
+- 部分成交 + 剩余挂单
+- 市价单即时成交
+- 撤单
+- FOK 全部成交或全部取消
+
+### 性能压测
+
+单机性能基准测试，输出 TPS 和延迟分布（P50 / P95 / P99）：
+
+```bash
+mvn test -pl apexmatch-gateway -Dtest="PerformanceBenchmarkTest"
+```
+
+压测项目：
+- **原始插入 TPS**：纯订单簿写入性能
+- **完整撮合 TPS**：下单 + 撮合 + 出结果全流程
+- **延迟百分位**：P50 / P95 / P99 延迟统计
+- **Disruptor 并发提交**：多线程经 Disruptor 队列提交的吞吐量
+
+### 故障演练
+
+模拟分布式故障场景：
+
+```bash
+mvn test -pl apexmatch-gateway -Dtest="FaultToleranceTest"
+```
+
+演练场景：
+- Raft Leader 宕机后自动选举，新 Leader 继续撮合
+- Follower 崩溃后重新追赶日志，状态一致
+- 熔断器触发后自动恢复
+- 多次 Leader 切换后各节点数据一致性校验
+
+### Rust 引擎测试与基准测试
+
+```bash
+cd apexmatch-engine-rs
+
+# 单元测试
+cargo test
+
+# 基准测试（Criterion）
+cargo bench
+```
+
+基准测试报告生成于 `target/criterion/` 目录，包含 HTML 报告。
+
+---
+
+## API 文档
+
+启动服务后访问 Swagger UI 查看完整 API 文档：
+
+```
+http://localhost:8080/swagger-ui.html
+```
+
+### 核心接口一览
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/orders` | 下单 |
+| DELETE | `/api/v1/orders` | 撤单 |
+| GET | `/api/v1/orders/{orderId}` | 查询订单（预留） |
+| GET | `/api/v1/account/{userId}` | 查询账户信息 |
+| POST | `/api/v1/account/{userId}/deposit` | 入金 |
+| GET | `/api/v1/market/depth/{symbol}` | 查询盘口深度 |
+| GET | `/api/v1/market/klines` | 查询 K 线数据 |
+
+### WebSocket 订阅
+
+连接 `ws://localhost:8080/ws/market`，发送订阅消息：
+
+```json
+{"action": "subscribe", "topic": "depth:BTC-USDT"}
+```
+
+---
+
+## 核心配置项
+
+`application.yml` 完整配置参考：
+
+```yaml
+server:
+  port: 8080
+
+apexmatch:
+  engine:
+    type: java                    # java | rust
+    rust-library-path: /path/to/libapexmatch_engine_rs.dylib
+    symbols:
+      - BTC-USDT
+      - ETH-USDT
+
+logging:
+  level:
+    com.apexmatch: INFO
+```
+
+| 配置项 | 类型 | 默认值 | 说明 |
+|--------|------|--------|------|
+| `server.port` | int | 8080 | HTTP 服务端口 |
+| `apexmatch.engine.type` | string | java | 撮合引擎类型 |
+| `apexmatch.engine.rust-library-path` | string | — | Rust 动态库路径 |
+| `apexmatch.engine.symbols` | list | BTC-USDT, ETH-USDT | 初始化交易对 |
+| `logging.level.com.apexmatch` | string | INFO | 日志级别 |

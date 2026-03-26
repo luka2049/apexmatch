@@ -6,7 +6,6 @@ import com.apexmatch.account.service.impl.AccountServiceImpl;
 import com.apexmatch.account.service.impl.PositionServiceImpl;
 import com.apexmatch.common.util.SnowflakeIdGenerator;
 import com.apexmatch.engine.api.MatchingEngine;
-import com.apexmatch.engine.java.JavaMatchingEngine;
 import com.apexmatch.gateway.disruptor.OrderDisruptorService;
 import com.apexmatch.market.service.KlineService;
 import com.apexmatch.market.service.impl.KlineServiceImpl;
@@ -27,14 +26,6 @@ public class ServiceConfig {
     @Bean
     public SnowflakeIdGenerator snowflakeIdGenerator() {
         return new SnowflakeIdGenerator(1, 1);
-    }
-
-    @Bean
-    public MatchingEngine matchingEngine() {
-        JavaMatchingEngine engine = new JavaMatchingEngine();
-        engine.init("BTC-USDT", null);
-        engine.init("ETH-USDT", null);
-        return engine;
     }
 
     @Bean

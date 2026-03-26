@@ -46,6 +46,11 @@
             <groupId>com.apexmatch</groupId>
             <artifactId>apexmatch-ha</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.apexmatch</groupId>
+            <artifactId>apexmatch-engine-rust-adapter</artifactId>
+            <optional>true</optional>
+        </dependency>
 
         <!-- Spring Boot -->
         <dependency>
