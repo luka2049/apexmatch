@@ -68,4 +68,14 @@ public class Position {
      * 杠杆倍数
      */
     private Integer leverage;
+
+    /**
+     * 止损价（多仓：价格跌破触发；空仓：价格涨破触发）
+     */
+    private BigDecimal stopLossPrice;
+
+    /**
+     * 止盈价（多仓：价格涨破触发；空仓：价格跌破触发）
+     */
+    private BigDecimal takeProfitPrice;
 }
