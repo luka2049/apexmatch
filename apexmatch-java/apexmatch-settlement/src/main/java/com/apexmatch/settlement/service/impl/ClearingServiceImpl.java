@@ -46,12 +46,31 @@ public class ClearingServiceImpl implements ClearingService {
         // Taker 端清算
         accountService.debit(trade.getTakerUserId(), DEFAULT_CURRENCY, takerFee,
                 trade.getTakerOrderId(), trade.getTradeId());
+
+        // 检查是否为平仓操作，如果是则解冻保证金
+        boolean takerIsClosing = isClosingPosition(trade.getTakerUserId(), trade.getSymbol(), OrderSide.BUY, trade.getQuantity());
+        if (takerIsClosing) {
+            BigDecimal unfreezeAmount = calculateUnfreezeMargin(trade.getTakerUserId(), trade.getSymbol(),
+                    trade.getQuantity(), leverage);
+            accountService.unfreezeMargin(trade.getTakerUserId(), DEFAULT_CURRENCY, unfreezeAmount);
+            log.debug("Taker 平仓解冻保证金 userId={} amount={}", trade.getTakerUserId(), unfreezeAmount);
+        }
+
         positionService.updateOnTrade(trade.getTakerUserId(), trade.getSymbol(),
                 OrderSide.BUY, trade.getQuantity(), trade.getPrice(), leverage);
 
         // Maker 端清算
         accountService.debit(trade.getMakerUserId(), DEFAULT_CURRENCY, makerFee,
                 trade.getMakerOrderId(), trade.getTradeId());
+
+        boolean makerIsClosing = isClosingPosition(trade.getMakerUserId(), trade.getSymbol(), OrderSide.SELL, trade.getQuantity());
+        if (makerIsClosing) {
+            BigDecimal unfreezeAmount = calculateUnfreezeMargin(trade.getMakerUserId(), trade.getSymbol(),
+                    trade.getQuantity(), leverage);
+            accountService.unfreezeMargin(trade.getMakerUserId(), DEFAULT_CURRENCY, unfreezeAmount);
+            log.debug("Maker 平仓解冻保证金 userId={} amount={}", trade.getMakerUserId(), unfreezeAmount);
+        }
+
         positionService.updateOnTrade(trade.getMakerUserId(), trade.getSymbol(),
                 OrderSide.SELL, trade.getQuantity(), trade.getPrice(), leverage);
 
@@ -62,6 +81,50 @@ public class ClearingServiceImpl implements ClearingService {
         result.addAll(accountService.getLedger(trade.getTakerUserId(), DEFAULT_CURRENCY));
         result.addAll(accountService.getLedger(trade.getMakerUserId(), DEFAULT_CURRENCY));
         return result;
+    }
+
+    /**
+     * 判断是否为平仓操作（成交方向与现有持仓方向相反）
+     */
+    private boolean isClosingPosition(long userId, String symbol, OrderSide side, BigDecimal qty) {
+        com.apexmatch.common.entity.Position pos = positionService.getOrCreatePosition(userId, symbol);
+        BigDecimal currentQty = pos.getQuantity();
+
+        // 无持仓，不是平仓
+        if (currentQty.signum() == 0) {
+            return false;
+        }
+
+        // 买入且当前持有空仓（负数），或卖出且当前持有多仓（正数），则为平仓
+        if (side == OrderSide.BUY && currentQty.signum() < 0) {
+            return true;
+        }
+        if (side == OrderSide.SELL && currentQty.signum() > 0) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * 计算需要解冻的保证金（按平仓数量比例）
+     */
+    private BigDecimal calculateUnfreezeMargin(long userId, String symbol, BigDecimal closeQty, int leverage) {
+        com.apexmatch.common.entity.Position pos = positionService.getOrCreatePosition(userId, symbol);
+        BigDecimal currentQty = pos.getQuantity().abs();
+
+        if (currentQty.signum() == 0) {
+            return BigDecimal.ZERO;
+        }
+
+        // 实际平仓数量（不能超过现有持仓）
+        BigDecimal actualCloseQty = closeQty.min(currentQty);
+
+        // 计算平仓部分的保证金：(平仓数量 / 持仓数量) * 已占用保证金
+        // 简化计算：平仓价值 / 杠杆
+        BigDecimal entryPrice = currentQty.signum() > 0 ? pos.getLongEntryPrice() : pos.getShortEntryPrice();
+        BigDecimal closeValue = entryPrice.multiply(actualCloseQty);
+        return closeValue.divide(BigDecimal.valueOf(leverage), 8, RoundingMode.HALF_UP);
     }
 
     @Override
