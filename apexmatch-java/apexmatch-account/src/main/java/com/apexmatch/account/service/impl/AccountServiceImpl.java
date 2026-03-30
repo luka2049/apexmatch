@@ -11,11 +11,13 @@ import lombok.extern.slf4j.Slf4j;
 import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 /**
  * 账户服务内存实现。
@@ -253,5 +255,18 @@ public class AccountServiceImpl implements AccountService {
         if (list.size() > MAX_LEDGER_SIZE) {
             list.subList(0, list.size() - MAX_LEDGER_SIZE).clear();
         }
+    }
+
+    @Override
+    public Set<Long> getAllActiveUserIds(String currency) {
+        return accounts.entrySet().stream()
+                .filter(e -> e.getKey().endsWith(":" + currency))
+                .map(e -> e.getValue().getUserId())
+                .filter(userId -> {
+                    Account account = accounts.get(key(userId, currency));
+                    return account != null &&
+                            (account.getBalance().signum() > 0 || account.getFrozenBalance().signum() > 0);
+                })
+                .collect(Collectors.toSet());
     }
 }

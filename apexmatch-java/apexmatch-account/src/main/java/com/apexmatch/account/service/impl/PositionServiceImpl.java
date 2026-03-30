@@ -12,8 +12,10 @@ import lombok.extern.slf4j.Slf4j;
 import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
 
 /**
  * 持仓服务内存实现。
@@ -179,5 +181,14 @@ public class PositionServiceImpl implements PositionService {
         return absOld.multiply(oldPrice, MC)
                 .add(newQty.multiply(newPrice, MC))
                 .divide(totalQty, SCALE, RM);
+    }
+
+    @Override
+    public List<Position> getAllOpenPositions() {
+        return positions.values().stream()
+                .filter(pos -> pos.getQuantity().signum() != 0
+                        || pos.getLongQuantity().signum() != 0
+                        || pos.getShortQuantity().signum() != 0)
+                .collect(Collectors.toList());
     }
 }

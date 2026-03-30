@@ -4,6 +4,7 @@ import com.apexmatch.common.entity.Position;
 import com.apexmatch.common.enums.OrderSide;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * 持仓管理服务，支持逐仓/全仓、单向/双向持仓。
@@ -40,4 +41,10 @@ public interface PositionService {
 
     /** 计算强平价（逐仓模式） */
     BigDecimal calculateLiquidationPrice(Position pos, BigDecimal isolatedMargin);
+
+    /**
+     * 获取所有持仓（用于日终结算）。
+     * 仅返回持仓数量不为 0 的持仓。
+     */
+    List<Position> getAllOpenPositions();
 }

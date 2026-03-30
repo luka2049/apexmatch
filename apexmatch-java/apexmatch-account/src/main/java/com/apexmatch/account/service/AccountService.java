@@ -5,6 +5,7 @@ import com.apexmatch.common.entity.FundLedgerEntry;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 账户资金管理服务。
@@ -37,4 +38,10 @@ public interface AccountService {
     BigDecimal getAvailableBalance(long userId, String currency);
 
     List<FundLedgerEntry> getLedger(long userId, String currency);
+
+    /**
+     * 获取所有活跃用户 ID（用于日终结算）。
+     * 活跃用户定义：有账户余额或冻结余额的用户。
+     */
+    Set<Long> getAllActiveUserIds(String currency);
 }
