@@ -1,0 +1,12 @@
+# 压测专用配置：放开限流，提高吞吐上限
+apexmatch:
+  rate-limit:
+    max-tokens: 1000000
+    refill-per-second: 1000000
+  circuit-breaker:
+    failure-threshold: 100000
+    cooldown-ms: 1000
+
+logging:
+  level:
+    com.apexmatch: WARN

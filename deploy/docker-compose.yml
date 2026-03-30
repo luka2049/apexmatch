@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  apexmatch:
+    build: .
+    container_name: apexmatch
+    ports:
+      - "8080:8080"
+    environment:
+      - JAVA_OPTS=-Xms512m -Xmx1g -XX:+UseG1GC
+      - SPRING_PROFILES_ACTIVE=prod
+      - APEXMATCH_ENGINE_TYPE=java
+    volumes:
+      - ./application-prod.yml:/app/application-prod.yml
+      - apexmatch-logs:/app/logs
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/v1/market/depth/BTC-USDT?levels=1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  apexmatch-logs:

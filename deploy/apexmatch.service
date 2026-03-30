@@ -1,0 +1,24 @@
+[Unit]
+Description=ApexMatch Trading Engine
+After=network.target
+
+[Service]
+Type=simple
+User=apexmatch
+Group=apexmatch
+WorkingDirectory=/opt/apexmatch
+ExecStart=/usr/bin/java \
+    -Xms512m -Xmx1g \
+    -XX:+UseG1GC \
+    -XX:MaxGCPauseMillis=10 \
+    -jar apexmatch-gateway-1.0.0-SNAPSHOT.jar \
+    --spring.profiles.active=prod
+Restart=always
+RestartSec=3
+LimitNOFILE=65536
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
