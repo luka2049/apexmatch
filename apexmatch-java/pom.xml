@@ -26,6 +26,7 @@
         <module>apexmatch-fund-chain</module>
         <module>apexmatch-blockchain</module>
         <module>apexmatch-aml</module>
+        <module>apexmatch-otc</module>
     </modules>
 
     <properties>
