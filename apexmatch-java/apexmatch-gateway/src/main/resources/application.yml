@@ -47,12 +47,16 @@ spring:
 # =============================================
 apexmatch:
   engine:
-    # 引擎类型：java（默认）| rust
+    # 引擎类型：java（默认）| rust | golang
     type: java
     # Rust 引擎动态库路径（仅 type=rust 时需要）
     # macOS:  /path/to/libapexmatch_engine_rs.dylib
     # Linux:  /path/to/libapexmatch_engine_rs.so
     rust-library-path: ${APEXMATCH_RUST_LIB_PATH:./libapexmatch_engine_rs.dylib}
+    # Golang 引擎动态库路径（仅 type=golang 时需要）
+    # macOS:  /path/to/libapexmatch_go.dylib
+    # Linux:  /path/to/libapexmatch_go.so
+    golang-library-path: ${APEXMATCH_GOLANG_LIB_PATH:./libapexmatch_go.dylib}
     # 启动时初始化的交易对列表
     symbols:
       - BTC-USDT

@@ -20,6 +20,7 @@
         <module>apexmatch-risk</module>
         <module>apexmatch-market-data</module>
         <module>apexmatch-engine-rust-adapter</module>
+        <module>apexmatch-engine-golang-adapter</module>
         <module>apexmatch-ha</module>
         <module>apexmatch-router</module>
         <module>apexmatch-gateway</module>
