@@ -24,6 +24,7 @@
         <module>apexmatch-router</module>
         <module>apexmatch-gateway</module>
         <module>apexmatch-fund-chain</module>
+        <module>apexmatch-blockchain</module>
     </modules>
 
     <properties>
