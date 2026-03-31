@@ -23,6 +23,7 @@
         <module>apexmatch-ha</module>
         <module>apexmatch-router</module>
         <module>apexmatch-gateway</module>
+        <module>apexmatch-fund-chain</module>
     </modules>
 
     <properties>
